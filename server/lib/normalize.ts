@@ -54,16 +54,18 @@ function preferIncoming(existing: Msg, incoming: Msg): void {
   if (incoming.edited) existing.edited = true
   if (incoming.media) {
     if (!existing.media) existing.media = incoming.media
-    else {
-      // keep whichever side actually has the file on disk
-      if (!existing.media.file && incoming.media.file) {
-        existing.media = { ...incoming.media }
-      }
+    else if (!existing.media.file && incoming.media.file) {
+      // the incoming side actually has the file on disk — take it wholesale
+      existing.media = { ...incoming.media }
+    } else {
+      // no file to gain, but richer metadata still matters: the filename lets
+      // a future import (another backup, the partner's export) fill the gap
+      existing.media.originalName ??= incoming.media.originalName
       if (existing.media.type === 'unknown' && incoming.media.type !== 'unknown') {
         existing.media.type = incoming.media.type
       }
-      if (existing.media.file) existing.media.missing = false
     }
+    if (existing.media.file) existing.media.missing = false
   }
   const exText = normText(existing.text)
   const inText = normText(incoming.text)

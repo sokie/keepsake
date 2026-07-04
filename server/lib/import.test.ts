@@ -152,6 +152,18 @@ describe('mergeMessages (export + wts)', () => {
     expect(messages.find((m) => m.text === '❤️❤️❤️')?.reactions?.[0]).toEqual({ emoji: '❤️', count: 2 })
   })
 
+  it('preserves the filename even when the file itself is not in the import', () => {
+    const bare = buildExportMsgs(parseExportTxt(TXT), 'Alex')
+    const withNames = buildWtsMsgs(WTS_CHAT, 'Alex', 'Maia').msgs.map((m) => ({
+      ...m,
+      media: m.media ? { ...m.media, file: undefined, missing: true } : undefined,
+    }))
+    const { messages: mergedBare } = mergeMessages(bare, withNames)
+    const sticker = mergedBare.find((m) => m.media?.type === 'sticker')
+    expect(sticker?.media?.originalName).toBe('STK-20241225-WA0002.webp')
+    expect(sticker?.media?.file).toBeUndefined()
+  })
+
   it('upgrades <Media omitted> to a typed media message', () => {
     const upgraded = messages.filter((m) => m.media && m.fromMe && Math.floor(m.ts / 60000) === Math.floor(new Date(2024, 11, 25, 9, 18).getTime() / 60000))
     expect(upgraded.length).toBe(1)
