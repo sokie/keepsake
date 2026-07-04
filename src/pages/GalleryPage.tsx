@@ -1,14 +1,65 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import type { MemoryMeta } from '../../shared/types'
+import JSZip from 'jszip'
+import type { Memory, MemoryMeta } from '../../shared/types'
 import { api } from '../lib/api'
 import { fmtRange } from '../lib/format'
+import { MemoryCanvas } from '../components/MemoryCanvas'
+import { captureNodePng } from '../lib/exportPng'
 
 export default function GalleryPage() {
   const [memories, setMemories] = useState<MemoryMeta[] | null>(null)
   const [error, setError] = useState('')
   const [q, setQ] = useState('')
   const [activeTags, setActiveTags] = useState<Set<string>>(new Set())
+  const [bulkMode, setBulkMode] = useState<'replay' | 'page' | 'png'>('page')
+  const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null)
+  const [renderMemory, setRenderMemory] = useState<Memory | null>(null)
+  const renderRef = useRef<HTMLDivElement>(null)
+
+  // "fake" bulk PNG: mount each memory off-screen, capture with the same
+  // pipeline as the single-memory button, collect everything into one zip
+  const bulkPng = async () => {
+    if (!memories?.length || bulkProgress) return
+    const zip = new JSZip()
+    setBulkProgress({ done: 0, total: memories.length })
+    let failed = 0
+    try {
+      for (let i = 0; i < memories.length; i++) {
+        try {
+          const mem = await api.memory(memories[i].id)
+          setRenderMemory(mem)
+          // wait for React to commit and the eager media to decode
+          for (let t = 0; t < 100 && !renderRef.current; t++) await new Promise((r) => setTimeout(r, 20))
+          const node = renderRef.current
+          if (!node) throw new Error('render container missing')
+          await Promise.all(
+            [...node.querySelectorAll('img')].map((im) => (im.decode ? im.decode().catch(() => {}) : Promise.resolve())),
+          )
+          await new Promise((r) => setTimeout(r, 50))
+          const { dataUrl } = await captureNodePng(node)
+          zip.file(`${mem.id}.png`, dataUrl.split(',')[1], { base64: true })
+          api.uploadPng(mem.id, dataUrl).catch(() => {})
+        } catch (e) {
+          console.error('bulk png: failed to render', memories[i].id, e)
+          failed++
+        } finally {
+          setRenderMemory(null)
+          setBulkProgress({ done: i + 1, total: memories.length })
+        }
+      }
+      const blob = await zip.generateAsync({ type: 'blob' })
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = 'keepsake-memories-png.zip'
+      a.click()
+      window.setTimeout(() => URL.revokeObjectURL(a.href), 60000)
+    } finally {
+      setBulkProgress(null)
+      setRenderMemory(null)
+    }
+    if (failed) window.alert(`${failed} memor${failed === 1 ? 'y' : 'ies'} failed to render — the rest are in the zip.`)
+  }
 
   useEffect(() => {
     api.memories().then(setMemories).catch((e) => setError(e.message))
@@ -74,14 +125,50 @@ export default function GalleryPage() {
         {memories.length} kept {memories.length === 1 ? 'moment' : 'moments'}
       </p>
 
-      {(allTags.length > 0 || memories.length > 3) && (
-        <div className="filterbar">
-          <input className="field" placeholder="Search titles & first lines…" value={q} onChange={(e) => setQ(e.target.value)} />
-          {allTags.map((t) => (
-            <button key={t} className={`tag clickable${activeTags.has(t) ? ' on' : ''}`} onClick={() => toggleTag(t)}>
-              {t}
+      <div className="filterbar">
+        {(allTags.length > 0 || memories.length > 3) && (
+          <>
+            <input className="field" placeholder="Search titles & first lines…" value={q} onChange={(e) => setQ(e.target.value)} />
+            {allTags.map((t) => (
+              <button key={t} className={`tag clickable${activeTags.has(t) ? ' on' : ''}`} onClick={() => toggleTag(t)}>
+                {t}
+              </button>
+            ))}
+          </>
+        )}
+        <div className="savebar">
+          <select
+            className="field"
+            value={bulkMode}
+            onChange={(e) => setBulkMode(e.target.value as 'replay' | 'page' | 'png')}
+            title="format for all memories"
+            disabled={!!bulkProgress}
+          >
+            <option value="page">Page .html</option>
+            <option value="replay">Replay .html</option>
+            <option value="png">Tall PNG</option>
+          </select>
+          {bulkMode === 'png' ? (
+            <button className="btn" onClick={bulkPng} disabled={!!bulkProgress}>
+              {bulkProgress ? (
+                <>
+                  <span className="spin" /> Rendering {bulkProgress.done}/{bulkProgress.total}…
+                </>
+              ) : (
+                <>⬇ Save all ({memories.length})</>
+              )}
             </button>
-          ))}
+          ) : (
+            <a className="btn" href={`/api/memories/export.zip?mode=${bulkMode}`}>
+              ⬇ Save all ({memories.length})
+            </a>
+          )}
+        </div>
+      </div>
+
+      {renderMemory && (
+        <div key={renderMemory.id} style={{ position: 'fixed', left: -20000, top: 0, width: 640 }} aria-hidden>
+          <MemoryCanvas ref={renderRef} memory={renderMemory} mediaBase={`/api/memory-media/${renderMemory.id}`} eager />
         </div>
       )}
 

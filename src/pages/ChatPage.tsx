@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { Virtuoso, VirtuosoHandle } from 'react-virtuoso'
 import type { ChatMeta, Msg } from '../../shared/types'
 import { api } from '../lib/api'
@@ -28,7 +28,6 @@ interface Win {
 
 export default function ChatPage() {
   const { chatId = '' } = useParams()
-  const navigate = useNavigate()
   const virtuoso = useRef<VirtuosoHandle>(null)
 
   const [chat, setChat] = useState<ChatMeta | null>(null)
@@ -42,6 +41,9 @@ export default function ChatPage() {
   const [showSave, setShowSave] = useState(false)
   const [saveBusy, setSaveBusy] = useState(false)
   const [saveError, setSaveError] = useState('')
+  // saving must never navigate away — search, scroll and selection context stay
+  const [savedToast, setSavedToast] = useState<{ id: string; title: string } | null>(null)
+  const toastTimer = useRef(0)
 
   const [q, setQ] = useState('')
   const [pos, setPos] = useState(0)
@@ -236,12 +238,20 @@ export default function ChatPage() {
         endId: msgs[hi].id,
         ...fields,
       })
-      navigate(`/memory/${memory.id}`)
+      setShowSave(false)
+      setAnchorId(null)
+      setEndId(null)
+      setSavedToast({ id: memory.id, title: memory.title })
+      window.clearTimeout(toastTimer.current)
+      toastTimer.current = window.setTimeout(() => setSavedToast(null), 8000)
     } catch (e) {
       setSaveError((e as Error).message)
+    } finally {
       setSaveBusy(false)
     }
   }
+
+  useEffect(() => () => window.clearTimeout(toastTimer.current), [])
 
   if (error)
     return (
@@ -334,6 +344,20 @@ export default function ChatPage() {
           }}
         />
       </div>
+
+      {savedToast && !hasSelection && !showSave && (
+        <div className="selectbar toast-ok">
+          <span>
+            💌 Saved <b>“{savedToast.title}”</b>
+          </span>
+          <a className="btn rose small" href={`/memory/${savedToast.id}`} target="_blank" rel="noreferrer">
+            Open ↗
+          </a>
+          <button className="x" onClick={() => setSavedToast(null)}>
+            ✕
+          </button>
+        </div>
+      )}
 
       {hasSelection && !showSave && (
         <div className="selectbar">

@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import type { Memory } from '../../shared/types'
 import { api } from '../lib/api'
 import { fmtDay, fmtRange } from '../lib/format'
-import { MessageRow } from '../components/MessageBubble'
+import { MemoryCanvas } from '../components/MemoryCanvas'
 import { SaveMemoryDialog } from '../components/SaveMemoryDialog'
 import { Replay } from '../components/Replay'
 import { exportMemoryPng } from '../lib/exportPng'
@@ -107,30 +107,7 @@ export default function MemoryPage() {
 
         {notice && <div className="callout ok" style={{ marginBottom: 18 }}>{notice}</div>}
 
-        <div ref={pngNode} className="png-canvas mem-thread" style={{ padding: 0, overflow: 'hidden' }}>
-          <div className="chapter">
-            <div className="seal">{memory.sealEmoji}</div>
-            <h1>{memory.title}</h1>
-            <div className="dates">
-              {fmtRange(memory.startTs, memory.endTs)} · with {memory.chatName}
-            </div>
-            {memory.note && <p className="note">“{memory.note}”</p>}
-            {memory.tags.length > 0 && (
-              <div className="tagrow" style={{ marginTop: 14 }}>
-                {memory.tags.map((t) => (
-                  <span key={t} className="tag">
-                    {t}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-          <div className="png-thread">
-            {memory.messages.map((m, i) => (
-              <MessageRow key={m.id} m={m} prev={i > 0 ? memory.messages[i - 1] : undefined} mediaBase={mediaBase} />
-            ))}
-          </div>
-        </div>
+        <MemoryCanvas ref={pngNode} memory={memory} mediaBase={mediaBase} />
 
         <div className="mem-foot">kept on {fmtDay(new Date(memory.createdAt).getTime())} 💌</div>
       </div>

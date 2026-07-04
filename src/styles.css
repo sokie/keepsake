@@ -611,6 +611,10 @@ details.guide .steps { margin-top: 10px; }
 .selectbar .muted { color: rgba(253, 248, 238, 0.65); }
 .selectbar .x { padding: 6px 10px; border-radius: 999px; color: rgba(253, 248, 238, 0.8); }
 .selectbar .x:hover { background: rgba(253, 248, 238, 0.14); }
+.selectbar.toast-ok { background: rgba(58, 82, 52, 0.95); }
+
+.savebar { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+.savebar .field { width: auto; padding: 8px 12px; font-size: 14px; font-family: var(--font-chat); }
 
 /* ————— modal ————— */
 

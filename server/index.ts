@@ -318,6 +318,23 @@ app.get('/api/memories', (_req, res) => {
   res.json(store.listMemories())
 })
 
+// every memory as a self-contained .html in one zip — must be registered
+// before the /api/memories/:id routes so the literal path wins
+app.get('/api/memories/export.zip', (req, res) => {
+  const mode = req.query.mode === 'page' ? 'page' : 'replay'
+  const metas = store.listMemories()
+  if (metas.length === 0) return void res.status(404).json({ error: 'no memories to export' })
+  const zip = new AdmZip()
+  for (const meta of metas) {
+    const m = store.getMemory(meta.id)
+    if (!m) continue
+    zip.addFile(`${m.id}.html`, Buffer.from(renderMemoryHtml(m, store.memoryMediaDir(m.id), mode), 'utf8'))
+  }
+  res.setHeader('Content-Type', 'application/zip')
+  res.setHeader('Content-Disposition', `attachment; filename="keepsake-memories-${mode}.zip"`)
+  res.send(zip.toBuffer())
+})
+
 app.post('/api/memories', (req, res) => {
   const { chatId, startId, endId, title, note, tags } = req.body ?? {}
   if (!chatId || !startId || !endId || !title?.trim()) {

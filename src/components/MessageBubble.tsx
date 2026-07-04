@@ -13,8 +13,9 @@ const MISSING_LABEL: Record<string, string> = {
   unknown: 'attachment',
 }
 
-function MediaEl({ m, mediaBase }: { m: Msg; mediaBase: string }) {
+function MediaEl({ m, mediaBase, eager }: { m: Msg; mediaBase: string; eager?: boolean }) {
   const media = m.media!
+  const loading = eager ? 'eager' : 'lazy'
   if (!media.file) {
     return (
       <div className="missing-media">
@@ -44,11 +45,11 @@ function MediaEl({ m, mediaBase }: { m: Msg; mediaBase: string }) {
           </>
         )
       }
-      return <img src={src} loading="lazy" alt="" />
+      return <img src={src} loading={loading} alt="" />
     case 'image':
-      return <img src={src} loading="lazy" alt="" />
+      return <img src={src} loading={loading} alt="" />
     case 'sticker':
-      return <img src={src} loading="lazy" alt="" className="sticker" />
+      return <img src={src} loading={loading} alt="" className="sticker" />
     case 'video':
       return (
         <>
@@ -88,11 +89,13 @@ export interface MessageRowProps {
   selEdge?: boolean
   onSelect?: (id: string) => void
   animate?: boolean
+  /** load media immediately — required for off-screen capture */
+  eager?: boolean
   /** suppress the automatic day separator (replay draws its own) */
   noDayChip?: boolean
 }
 
-export function MessageRow({ m, prev, mediaBase, selectable, selEdge, onSelect, animate, noDayChip }: MessageRowProps) {
+export function MessageRow({ m, prev, mediaBase, selectable, selEdge, onSelect, animate, eager, noDayChip }: MessageRowProps) {
   const dayChip = !noDayChip && (!prev || !sameDay(prev.ts, m.ts)) ? <div className="daychip">{fmtDay(m.ts)}</div> : null
 
   if (m.system) {
@@ -135,7 +138,7 @@ export function MessageRow({ m, prev, mediaBase, selectable, selEdge, onSelect, 
             .join(' ')}
           onClick={selectable && onSelect ? () => onSelect(m.id) : undefined}
         >
-          {m.media && <MediaEl m={m} mediaBase={mediaBase} />}
+          {m.media && <MediaEl m={m} mediaBase={mediaBase} eager={eager} />}
           {m.text && <span className={m.media ? 'cap txt' : 'txt'}>{m.text}</span>}
           <span className="time">
             {m.edited && <i>edited · </i>}
