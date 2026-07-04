@@ -1,0 +1,28 @@
+# ————— PRIVATE DATA — real conversations live here, NEVER commit —————
+data/
+uploads/
+
+# dependencies / build
+node_modules/
+dist/
+build/
+release/
+*.tsbuildinfo
+coverage/
+
+# generated demo fixtures (recreate with `npm run fixtures`)
+fixtures/sample/
+fixtures/sample-export.zip
+fixtures/wts-sample/
+
+# environment / local config
+.env
+.env.*
+.claude/settings.local.json
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.log
