@@ -1,0 +1,47 @@
+{
+  "name": "keepsake",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "A local-first memory book for your WhatsApp conversations — save, replay and screenshot the moments worth keeping.",
+  "license": "MIT",
+  "scripts": {
+    "dev": "concurrently -n server,web -c yellow,cyan \"tsx watch server/index.ts\" \"vite\"",
+    "build": "vite build",
+    "start": "NODE_ENV=production tsx server/index.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "fixtures": "node fixtures/make-fixtures.mjs",
+    "package": "npm run build && node scripts/build-sea.mjs"
+  },
+  "dependencies": {
+    "@fontsource-variable/fraunces": "^5.2.5",
+    "@fontsource-variable/newsreader": "^5.2.5",
+    "adm-zip": "^0.5.16",
+    "express": "^5.1.0",
+    "html-to-image": "^1.11.13",
+    "multer": "^2.0.1",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-router-dom": "^7.6.0",
+    "react-virtuoso": "^4.12.0",
+    "whatsapp-chat-parser": "^4.0.2"
+  },
+  "devDependencies": {
+    "@types/adm-zip": "^0.5.7",
+    "@types/express": "^5.0.1",
+    "@types/multer": "^1.4.12",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^4.5.0",
+    "concurrently": "^9.1.0",
+    "esbuild": "^0.28.1",
+    "playwright-core": "^1.61.1",
+    "postject": "^1.0.0-alpha.6",
+    "tsx": "^4.19.0",
+    "typescript": "^5.8.0",
+    "vite": "^7.0.0",
+    "vitest": "^3.2.0"
+  }
+}
