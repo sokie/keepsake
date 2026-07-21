@@ -22,6 +22,20 @@ export interface Reaction {
   from?: string[]
 }
 
+/**
+ * A snapshot of the message this one replied to. Stored inline (not a
+ * reference) because a memory freezes a slice — the quoted original may well
+ * sit outside it — and because export .txt never carries reply context, so
+ * the snapshot is all we ever have.
+ */
+export interface QuotedMsg {
+  sender: string
+  fromMe: boolean
+  text?: string
+  /** set when the quoted message was media rather than text */
+  mediaType?: MediaType
+}
+
 export interface Msg {
   id: string
   /** epoch milliseconds */
@@ -33,6 +47,7 @@ export interface Msg {
   media?: Media
   reactions?: Reaction[]
   edited?: boolean
+  quoted?: QuotedMsg
   source: 'export' | 'wts' | 'msgstore'
 }
 

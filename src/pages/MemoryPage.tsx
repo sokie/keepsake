@@ -58,7 +58,7 @@ export default function MemoryPage() {
 
   const remove = async () => {
     if (!memory) return
-    if (window.confirm(`Delete the memory “${memory.title}”? This cannot be undone.`)) {
+    if (window.confirm(`Delete the memory “${memory.title}”?\nIt moves to the trash folder and is recoverable for 30 days.`)) {
       await api.deleteMemory(memoryId)
       navigate('/')
     }

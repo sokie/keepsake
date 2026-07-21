@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
-import type { MediaType, Msg, Reaction } from '../../shared/types.js'
+import type { MediaType, Msg, QuotedMsg, Reaction } from '../../shared/types.js'
 import { mediaTypeFromName } from './util.js'
 import { msgId } from './normalize.js'
 
@@ -166,6 +166,29 @@ export function buildMsgstoreMsgs(dbPath: string, jid: string, me: string, their
       }
     }
 
+    // quoted replies: message_quoted holds a snapshot of the replied-to message,
+    // keyed by the replying message's row id. Guarded — older schemas lack it.
+    const quoted = new Map<number, QuotedMsg>()
+    if (hasTable('message_quoted')) {
+      const rows = db
+        .prepare(
+          `SELECT mq.message_row_id AS mid, mq.from_me AS fromMe, mq.text_data AS text, mq.message_type AS type
+           FROM message_quoted mq JOIN message m ON m._id = mq.message_row_id
+           WHERE m.chat_row_id = ?`,
+        )
+        .all(chat.id) as Array<{ mid: unknown; fromMe: unknown; text: unknown; type: unknown }>
+      for (const r of rows) {
+        const q: QuotedMsg = { sender: r.fromMe ? me : theirName, fromMe: !!r.fromMe }
+        const text = typeof r.text === 'string' && r.text.trim() ? r.text.trim() : undefined
+        if (text) q.text = text
+        else {
+          const qt = Number(r.type ?? 0)
+          if (qt in MEDIA_TYPES) q.mediaType = MEDIA_TYPES[qt]
+        }
+        quoted.set(Number(r.mid), q)
+      }
+    }
+
     const rows = db
       .prepare(
         `SELECT m._id AS id, m.from_me AS fromMe, m.timestamp AS ts, m.text_data AS text,
@@ -223,6 +246,8 @@ export function buildMsgstoreMsgs(dbPath: string, jid: string, me: string, their
       if (edited.has(Number(r.id))) msg.edited = true
       const rx = reactions.get(Number(r.id))
       if (rx) msg.reactions = rx
+      const q = quoted.get(Number(r.id))
+      if (q) msg.quoted = q
       msgs.push(msg)
     }
 

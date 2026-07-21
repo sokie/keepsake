@@ -13,6 +13,27 @@ const MISSING_LABEL: Record<string, string> = {
   unknown: 'attachment',
 }
 
+const QUOTED_MEDIA_LABEL: Record<string, string> = {
+  image: '📷 Photo',
+  video: '🎬 Video',
+  gif: '🎞️ GIF',
+  sticker: '🌸 Sticker',
+  voice: '🎙️ Voice message',
+  audio: '🎵 Audio',
+  document: '📄 Document',
+  unknown: '📎 Attachment',
+}
+
+function QuotedBlock({ q }: { q: NonNullable<Msg['quoted']> }) {
+  const preview = q.text?.trim() || (q.mediaType && QUOTED_MEDIA_LABEL[q.mediaType]) || 'message'
+  return (
+    <div className={`quoted ${q.fromMe ? 'me' : 'them'}`}>
+      <span className="quoted-who">{q.sender}</span>
+      <span className="quoted-text">{preview}</span>
+    </div>
+  )
+}
+
 function MediaEl({ m, mediaBase, eager }: { m: Msg; mediaBase: string; eager?: boolean }) {
   const media = m.media!
   const loading = eager ? 'eager' : 'lazy'
@@ -108,7 +129,7 @@ export function MessageRow({ m, prev, mediaBase, selectable, selEdge, onSelect, 
   }
 
   const grouped = !!prev && !prev.system && prev.fromMe === m.fromMe && sameDay(prev.ts, m.ts) && m.ts - prev.ts < 180000 && !dayChip
-  const jumbo = !m.media && !!m.text && isEmojiOnly(m.text)
+  const jumbo = !m.media && !m.quoted && !!m.text && isEmojiOnly(m.text)
   const rowCls = [
     'row',
     m.fromMe ? 'me' : 'them',
@@ -138,6 +159,7 @@ export function MessageRow({ m, prev, mediaBase, selectable, selEdge, onSelect, 
             .join(' ')}
           onClick={selectable && onSelect ? () => onSelect(m.id) : undefined}
         >
+          {m.quoted && <QuotedBlock q={m.quoted} />}
           {m.media && <MediaEl m={m} mediaBase={mediaBase} eager={eager} />}
           {m.text && <span className={m.media ? 'cap txt' : 'txt'}>{m.text}</span>}
           <span className="time">

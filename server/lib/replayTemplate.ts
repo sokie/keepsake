@@ -123,6 +123,11 @@ export function renderMemoryHtml(
   .bubble.has-media { padding: 4px; }
   .bubble.has-media .cap { padding: 4px 5px 2px; }
   .bubble.has-media .time { margin-right: 5px; }
+  .quoted { display: block; margin: 1px 0 5px; padding: 4px 8px; border-left: 3px solid var(--rose);
+    border-radius: 4px; background: rgba(51,38,27,.06); font-size: 13.5px; line-height: 1.3; }
+  .me .quoted { background: rgba(20,80,40,.08); }
+  .quoted-who { display: block; font-weight: 600; font-size: 12.5px; color: var(--rose); }
+  .quoted-text { display: block; color: var(--ink-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .missing {
     display: flex; gap: 8px; align-items: center; padding: 10px 12px; font-size: 13px;
     background: rgba(51,38,27,.05); border: 1px dashed rgba(51,38,27,.2); border-radius: 6px; color: var(--ink-soft);
@@ -223,6 +228,17 @@ function mediaEl(m) {
   return a;
 }
 
+const QUOTED_MEDIA_LABEL = { image: '📷 Photo', video: '🎬 Video', gif: '🎞️ GIF', sticker: '🌸 Sticker', voice: '🎙️ Voice message', audio: '🎵 Audio', document: '📄 Document', unknown: '📎 Attachment' };
+function quotedEl(q) {
+  const d = document.createElement('div');
+  d.className = 'quoted ' + (q.fromMe ? 'me' : 'them');
+  const who = document.createElement('span'); who.className = 'quoted-who'; who.textContent = q.sender;
+  const tx = document.createElement('span'); tx.className = 'quoted-text';
+  tx.textContent = (q.text && q.text.trim()) || (q.mediaType && QUOTED_MEDIA_LABEL[q.mediaType]) || 'message';
+  d.appendChild(who); d.appendChild(tx);
+  return d;
+}
+
 function appendMsg(m, animate) {
   if (!prev || new Date(prev.ts).toDateString() !== new Date(m.ts).toDateString()) {
     const chip = document.createElement('div'); chip.className = 'daychip'; chip.textContent = fmtDay(m.ts);
@@ -238,13 +254,14 @@ function appendMsg(m, animate) {
   row.className = 'row ' + (m.fromMe ? 'me' : 'them') + (grouped ? '' : ' first') + (m.reactions?.length ? ' reacted' : '');
   const b = document.createElement('div');
   b.className = 'bubble' + (animate ? ' pop' : '');
+  if (m.quoted) b.appendChild(quotedEl(m.quoted));
   if (m.media) {
     b.classList.add('has-media');
     if (m.media.type === 'sticker' && m.media.file && DATA.media[m.media.file]) b.classList.add('stickerb');
     b.appendChild(mediaEl(m));
     if (m.text) { const c = document.createElement('div'); c.className = 'cap'; c.textContent = m.text; b.appendChild(c); }
   } else {
-    if (isJumbo(m.text)) b.classList.add('jumbo');
+    if (!m.quoted && isJumbo(m.text)) b.classList.add('jumbo');
     b.appendChild(document.createTextNode(m.text || ''));
   }
   const t = document.createElement('span'); t.className = 'time';

@@ -125,6 +125,12 @@ export default function ChatPage() {
     return m
   }, [msgs])
 
+  // normalize every message's text ONCE per chat load, not once per keystroke:
+  // norm() (lowercase + NFD + strip-diacritics) is the expensive part and it
+  // doesn't depend on the query, so on a 250k-message chat searching stayed
+  // smooth only by lifting it out of the per-keystroke matches loop below.
+  const normTexts = useMemo(() => msgs?.map((m) => (m.text ? norm(m.text) : '')) ?? [], [msgs])
+
   const winMsgs = useMemo(() => (msgs && win ? msgs.slice(win.start, win.end) : null), [msgs, win])
 
   const [lo, hi] = useMemo(() => {
@@ -137,14 +143,14 @@ export default function ChatPage() {
   }, [anchorId, endId, idx])
 
   const matches = useMemo(() => {
-    if (!msgs || !q.trim()) return []
+    if (!q.trim()) return []
     const nq = norm(q)
     const out: number[] = []
-    msgs.forEach((m, i) => {
-      if (m.text && norm(m.text).includes(nq)) out.push(i)
-    })
+    for (let i = 0; i < normTexts.length; i++) {
+      if (normTexts[i].includes(nq)) out.push(i)
+    }
     return out
-  }, [msgs, q])
+  }, [normTexts, q])
 
   useEffect(() => setPos(0), [q])
 

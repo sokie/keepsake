@@ -24,6 +24,8 @@ function makeDb(p: string) {
       parent_message_row_id INTEGER, message_add_on_type INTEGER, timestamp INTEGER);
     CREATE TABLE message_add_on_reaction (message_add_on_row_id INTEGER, reaction TEXT, sender_timestamp INTEGER);
     CREATE TABLE message_edit_info (message_row_id INTEGER, edited_timestamp INTEGER);
+    CREATE TABLE message_quoted (message_row_id INTEGER PRIMARY KEY, chat_row_id INTEGER, from_me INTEGER,
+      key_id TEXT, timestamp INTEGER, message_type INTEGER, text_data TEXT);
   `)
   db.exec(`
     INSERT INTO jid VALUES (1,'40711111111','s.whatsapp.net','40711111111@s.whatsapp.net');
@@ -51,6 +53,10 @@ function makeDb(p: string) {
     INSERT INTO message_add_on_reaction VALUES (1,'😍',${T(9, 1, 30)});
 
     INSERT INTO message_edit_info VALUES (7,${T(9, 5, 20)});
+
+    -- msg 7 ("i love you") replies to msg 1's text; msg 8 (video) replies to the image (msg 3)
+    INSERT INTO message_quoted VALUES (7,1,0,'k1',${T(9, 0, 5)},0,'hey you ❤️');
+    INSERT INTO message_quoted VALUES (8,1,1,'k3',${T(9, 1, 10)},1,NULL);
   `)
   db.close()
 }
@@ -148,6 +154,17 @@ describe('buildMsgstoreMsgs', () => {
 
   it('flags edited messages via message_edit_info', () => {
     expect(msgs.find((m) => m.text === 'i love you')?.edited).toBe(true)
+  })
+
+  it('attaches quoted-reply context, as text and as media snapshots', () => {
+    expect(msgs.find((m) => m.text === 'i love you')?.quoted).toEqual({
+      sender: 'Maia',
+      fromMe: false,
+      text: 'hey you ❤️',
+    })
+    // the pathless video (row 8) replies to the image — snapshot carries the media kind
+    const mediaReply = msgs.find((m) => m.media && !m.media.originalName)!
+    expect(mediaReply.quoted).toEqual({ sender: 'Alex', fromMe: true, mediaType: 'image' })
   })
 
   it('collects media refs and unique ids', () => {

@@ -22,7 +22,7 @@ export default function ArchivePage() {
   }
 
   const remove = async (chat: ChatMeta) => {
-    if (window.confirm(`Delete the imported archive “${chat.name}” (${chat.messageCount} messages)?\nSaved memories are self-contained and will NOT be deleted.`)) {
+    if (window.confirm(`Delete the imported archive “${chat.name}” (${chat.messageCount} messages)?\nSaved memories are self-contained and will NOT be deleted. The archive moves to the trash folder, recoverable for 30 days.`)) {
       await api.deleteChat(chat.id)
       reload()
     }

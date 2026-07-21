@@ -52,6 +52,9 @@ function preferIncoming(existing: Msg, incoming: Msg): void {
   }
   if (incoming.reactions?.length) existing.reactions = incoming.reactions
   if (incoming.edited) existing.edited = true
+  // reply context only ever comes from a database source (msgstore); let it
+  // fill in a message first seen via a reply-less export .txt
+  if (incoming.quoted && !existing.quoted) existing.quoted = incoming.quoted
   if (incoming.media) {
     if (!existing.media) existing.media = incoming.media
     else if (!existing.media.file && incoming.media.file) {

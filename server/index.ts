@@ -1,4 +1,6 @@
 import fs from 'node:fs'
+import http from 'node:http'
+import net from 'node:net'
 import path from 'node:path'
 import { isSea, getAsset } from 'node:sea'
 import { spawn } from 'node:child_process'
@@ -16,8 +18,23 @@ import { renderMemoryHtml } from './lib/replayTemplate.js'
 import * as store from './lib/store.js'
 
 const app = express()
+
+// Local-first means local-only. The server binds to loopback (see app.listen
+// below) AND rejects any request whose Host header isn't localhost. The Host
+// check is what closes the DNS-rebinding hole: a malicious website can point
+// its own domain at 127.0.0.1 and, without this, read the whole API straight
+// from the user's browser while Keepsake is running.
+app.use((req, res, next) => {
+  const hostname = (req.headers.host ?? '').replace(/:\d+$/, '').replace(/^\[|\]$/g, '')
+  if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') return next()
+  res.status(403).json({ error: 'forbidden: Keepsake only serves localhost' })
+})
+
 app.use(express.json({ limit: '150mb' }))
 const upload = multer({ dest: store.UPLOADS_DIR, limits: { fileSize: 2 * 1024 ** 3 } })
+
+// cheap liveness probe — also how a second launch recognizes a running instance
+app.get('/api/health', (_req, res) => void res.json({ app: 'keepsake' }))
 
 // ---------- chats ----------
 
@@ -439,20 +456,93 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
 })
 
 const PORT = Number(process.env.PORT ?? 3010)
-app.listen(PORT, () => {
-  const url = `http://localhost:${PORT}`
-  console.log(`Keepsake 💌  ${url}  (your data lives in ${store.DATA_DIR})`)
-  if (isSea() && !process.env.KEEPSAKE_NO_OPEN) {
-    const [cmd, args]: [string, string[]] =
-      process.platform === 'darwin'
-        ? ['open', [url]]
-        : process.platform === 'win32'
-          ? ['cmd', ['/c', 'start', '', url]]
-          : ['xdg-open', [url]]
-    try {
-      spawn(cmd, args, { detached: true, stdio: 'ignore' }).unref()
-    } catch {
-      /* the console already shows the URL */
-    }
+const url = `http://localhost:${PORT}`
+
+function openBrowser(): void {
+  if (process.env.KEEPSAKE_NO_OPEN) return
+  const [cmd, args]: [string, string[]] =
+    process.platform === 'darwin'
+      ? ['open', [url]]
+      : process.platform === 'win32'
+        ? ['cmd', ['/c', 'start', '', url]]
+        : ['xdg-open', [url]]
+  try {
+    spawn(cmd, args, { detached: true, stdio: 'ignore' }).unref()
+  } catch {
+    /* the console already shows the URL */
   }
-})
+}
+
+// Is anything already accepting connections on this port?
+function portInUse(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const sock = net.connect({ host: '127.0.0.1', port, timeout: 1000 })
+    sock.on('connect', () => {
+      sock.destroy()
+      resolve(true)
+    })
+    sock.on('error', () => resolve(false))
+    sock.on('timeout', () => {
+      sock.destroy()
+      resolve(false)
+    })
+  })
+}
+
+// Is the thing on this port our own Keepsake, or some unrelated service?
+function keepsakeAlreadyRunning(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const req = http.get({ host: '127.0.0.1', port, path: '/api/health', timeout: 1500 }, (r) => {
+      let body = ''
+      r.on('data', (c) => (body += c))
+      r.on('end', () => {
+        try {
+          resolve((JSON.parse(body) as { app?: string })?.app === 'keepsake')
+        } catch {
+          resolve(false)
+        }
+      })
+    })
+    req.on('error', () => resolve(false))
+    req.on('timeout', () => {
+      req.destroy()
+      resolve(false)
+    })
+  })
+}
+
+// Decide the port situation BEFORE binding. macOS fires a cross-process
+// listen()'s success callback *and then* EADDRINUSE, so reacting to the error
+// after the fact prints a misleading "started" line; a pre-flight probe is
+// deterministic. (Not top-level await — esbuild bundles this server as CJS.)
+async function start(): Promise<void> {
+  store.sweepTrash()
+
+  if (await portInUse(PORT)) {
+    if (await keepsakeAlreadyRunning(PORT)) {
+      // double-clicking the exe while it's already running: just reopen it,
+      // instead of the old crash with a stack trace and a vanishing window
+      console.log(`Keepsake is already running — opening ${url}`)
+      if (isSea()) openBrowser()
+    } else {
+      console.error(`Port ${PORT} is already in use by another program. Set PORT=<number> to choose a different one.`)
+      process.exitCode = 1
+    }
+    return
+  }
+
+  const server = app.listen(PORT, '127.0.0.1', () => {
+    console.log(`Keepsake 💌  ${url}  (your data lives in ${store.DATA_DIR})`)
+    if (isSea()) openBrowser()
+  })
+  server.on('error', (err: NodeJS.ErrnoException) => {
+    // rare: something grabbed the port in the gap between probe and bind
+    if (err.code === 'EADDRINUSE') {
+      console.error(`Port ${PORT} is already in use. Set PORT=<number> to choose a different one.`)
+      process.exit(1)
+    }
+    throw err
+  })
+}
+
+start()

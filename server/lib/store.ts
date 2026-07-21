@@ -7,17 +7,31 @@ import type { ChatMeta, Memory, MemoryMeta, Msg } from '../../shared/types.js'
 import { dominantEmoji } from '../../shared/emoji.js'
 import { slugify, shortHash } from './util.js'
 
-// the packaged single-binary app keeps everything in ~/Keepsake;
-// running from a checkout keeps data next to the code, as before
-const ROOT = process.env.KEEPSAKE_HOME
-  ? path.resolve(process.env.KEEPSAKE_HOME)
-  : isSea()
-    ? path.join(os.homedir(), 'Keepsake')
-    : process.cwd()
+// Where everything lives, in priority order:
+//  1. KEEPSAKE_HOME, if set — an explicit override wins.
+//  2. Portable mode (packaged binary only): if a `keepsake.portable` marker
+//     OR a `data/` folder sits next to the executable — a USB stick, a synced
+//     folder — keep everything there. Nothing to configure; the app travels
+//     with its data. (Users who love the single-exe never set env vars.)
+//  3. Packaged binary otherwise: ~/Keepsake.
+//  4. Running from a checkout: next to the code, as before.
+function resolveRoot(): string {
+  if (process.env.KEEPSAKE_HOME) return path.resolve(process.env.KEEPSAKE_HOME)
+  if (isSea()) {
+    const beside = path.dirname(process.execPath)
+    const portable = fs.existsSync(path.join(beside, 'keepsake.portable')) || fs.existsSync(path.join(beside, 'data'))
+    if (portable) return beside
+    return path.join(os.homedir(), 'Keepsake')
+  }
+  return process.cwd()
+}
+
+const ROOT = resolveRoot()
 
 export const DATA_DIR = path.join(ROOT, 'data')
 export const CHATS_DIR = path.join(DATA_DIR, 'chats')
 export const MEMORIES_DIR = path.join(DATA_DIR, 'memories')
+export const TRASH_DIR = path.join(DATA_DIR, 'trash')
 export const UPLOADS_DIR = path.join(ROOT, 'uploads')
 
 for (const dir of [CHATS_DIR, MEMORIES_DIR, UPLOADS_DIR]) {
@@ -35,6 +49,43 @@ function readJson<T>(file: string): T | undefined {
     return JSON.parse(fs.readFileSync(file, 'utf8')) as T
   } catch {
     return undefined
+  }
+}
+
+// ---------- trash ----------
+// Deleting a chat or memory is the worst possible failure for an app whose
+// whole point is "never lose this", so nothing is erased outright: the folder
+// is moved to data/trash/<kind>/<id>__<timestamp> and swept after 30 days.
+// Recovery is currently manual (move the folder back); a restore UI is a
+// natural follow-up.
+
+const TRASH_TTL_MS = 30 * 24 * 60 * 60 * 1000
+
+function moveToTrash(src: string, kind: 'chats' | 'memories', id: string): void {
+  if (!fs.existsSync(src)) return
+  const dir = path.join(TRASH_DIR, kind)
+  fs.mkdirSync(dir, { recursive: true })
+  const dest = path.join(dir, `${id}__${Date.now()}`)
+  try {
+    fs.renameSync(src, dest)
+  } catch {
+    // rename fails across filesystems (e.g. data on a USB stick) — copy + remove
+    fs.cpSync(src, dest, { recursive: true })
+    fs.rmSync(src, { recursive: true, force: true })
+  }
+}
+
+/** Purge trashed items older than the retention window. Called once at startup. */
+export function sweepTrash(now = Date.now()): void {
+  for (const kind of ['chats', 'memories'] as const) {
+    const dir = path.join(TRASH_DIR, kind)
+    if (!fs.existsSync(dir)) continue
+    for (const name of fs.readdirSync(dir)) {
+      const stamp = Number(name.split('__').pop())
+      if (Number.isFinite(stamp) && now - stamp > TRASH_TTL_MS) {
+        fs.rmSync(path.join(dir, name), { recursive: true, force: true })
+      }
+    }
   }
 }
 
@@ -71,7 +122,7 @@ export function saveChat(meta: ChatMeta): void {
 }
 
 export function deleteChat(id: string): void {
-  fs.rmSync(chatDir(id), { recursive: true, force: true })
+  moveToTrash(chatDir(id), 'chats', id)
 }
 
 export function readMessages(id: string): Msg[] {
@@ -135,7 +186,7 @@ export function saveMemory(memory: Memory): void {
 }
 
 export function deleteMemory(id: string): void {
-  fs.rmSync(memoryDir(id), { recursive: true, force: true })
+  moveToTrash(memoryDir(id), 'memories', id)
 }
 
 export interface CreateMemoryInput {
@@ -156,7 +207,11 @@ export function createMemoryFromRange(input: CreateMemoryInput): Memory {
   if (lo === -1 || hi === -1) throw Object.assign(new Error('start or end message not found'), { status: 400 })
   if (lo > hi) [lo, hi] = [hi, lo]
 
-  const slice = msgs.slice(lo, hi + 1).map((m) => ({ ...m, media: m.media ? { ...m.media } : undefined }))
+  const slice = msgs.slice(lo, hi + 1).map((m) => ({
+    ...m,
+    media: m.media ? { ...m.media } : undefined,
+    quoted: m.quoted ? { ...m.quoted } : undefined,
+  }))
   const title = input.title.trim()
   const id = `${new Date(slice[0].ts).toISOString().slice(0, 10)}-${slugify(title, 'memory')}-${shortHash(randomUUID(), 4)}`
 
