@@ -48,6 +48,14 @@ your conversations never leave your computer.
 [Releases](https://github.com/sokie/keepsake/releases): run it, your browser
 opens, and everything lives in `~/Keepsake`.
 
+**Portable mode**: keep Keepsake and its data together on a USB stick or a
+synced folder. Drop an empty file named `keepsake.portable` next to the
+executable (or just let a `data/` folder appear beside it) and everything —
+chats, memories, uploads — lives in that folder instead of `~/Keepsake`.
+Nothing to configure; the app travels with its data. Launch it again while
+it's already running and it simply reopens in your browser instead of
+complaining about the port.
+
 **Or run from source** (Node 24+: the backup importer uses the built-in
 `node:sqlite`):
 
